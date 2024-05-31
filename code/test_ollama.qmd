@@ -1,0 +1,64 @@
+---
+title: "Test `ollama` access through the `rollama` R package"
+author: "Hauke Licht"
+date: "2024-05-31"
+format: 
+  html:
+    embed-resources: true
+---
+
+This notebook shows you how to verify that you can use open-source LLMs like LlaMa 3 with R through `ollama`.
+
+## Setup
+
+```{R setup}
+library(rollama)
+options(rollama_verbose = FALSE)
+```
+## 1. Check that you have access to any models
+
+List available models to see that you have access to modesl running locally on your computer with `ollama`:
+
+```{r}
+rollama::list_models()
+```
+**Note** &mdash; This should list at least one model.
+
+## 2. Define the the model you want to use
+
+Go to https://ollama.com/library, choose the LLM model you want to use, and copy paste its name here.
+Let's start with `llama3:8b` because, at the time of writing, it is relatively recent and its large version can be shown to perform similarly well as OpenAI's GPT-4.
+
+```{r}
+MODEL = 'llama3:latest'
+# just set this as a global option
+options(rollama_model = MODEL)
+```
+
+**Note** &mdash; If you want to use a model that is not in the list shown with `rollama`::list_models()`, you need to first pull it.
+
+```{r}
+#| eval: false
+# don't run unless you want to download the model and have time to grab a tea
+pull_model(MODEL)
+```
+
+## 3. Request a chat completion
+
+```{r}
+response <- query(q = "Who won the world series in 2020?", screen = FALSE)
+# note: depending on your hardware, this will take a couple of seconds
+```
+
+The result of the model call is assigned to object `response`.
+Let's have a look at its structur:
+
+```{r}
+str(response)
+```
+
+The relevant content is in the element "message" as a list/data frame, and the generated response is in "content":
+
+```{r}
+response$message$content
+```

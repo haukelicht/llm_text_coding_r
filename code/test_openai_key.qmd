@@ -1,0 +1,111 @@
+---
+title: "Test OpenAI API access through the `openai` R package"
+author: "Hauke Licht"
+date: "2024-05-31"
+format: 
+  html:
+    embed-resources: true
+---
+
+This notebook shows you how to verify that you can use OpenAI's LLMs likle GPT-4-turbo through the OpenAI API.
+
+## Setup
+
+```{R setup}
+library(openai)
+```
+
+## 1. check that your OpenAI API key is set
+
+Let's assert that the OPENAI_API_KEY environment variable is set in the .Renviron file
+(see https://github.com/irudnyts/openai/?tab=readme-ov-file#authentication)
+
+```{r}
+stopifnot(Sys.getenv("OPENAI_API_KEY") != "")
+```
+
+**Note** &mdash; If this throws an error, go to the README file and follow the instructions to set up your OpenAI API key.
+
+## 2. Define the the model you want to use
+
+Go to https://platform.openai.com/docs/models, choose the GPT model you want to use, and copy paste its name here.
+Let's start with `gpt-3.5-turbo-0125` because this will work even if you have no OpenAI *Plus* subscription.
+
+```{r}
+MODEL = 'gpt-3.5-turbo-0125'
+```
+
+**Note** &mdash; You can also call `openai::list_models()` to see all available models.
+
+
+## 3. Request a chat completion
+
+```{r}
+response <- create_chat_completion(
+    model = MODEL,
+    messages = list(
+        list(
+            "role" = "user",
+            "content" = "Who won the world series in 2020?"
+        )
+    )
+)
+```
+
+The result of the API request is assigned to object `response`.
+Let's have a look at its structur:
+
+```{r}
+str(response)
+```
+
+The relevant content is in the element "choices" as a data frame.
+This data frame will have one row (unless we change the [number of completions](https://platform.openai.com/docs/api-reference/chat/create#chat-create-n) API parameter) and the generated text is in columns "message.content":
+
+```{r}
+response$choices$message.content
+```
+
+If you want to learn more about the contents of a chat completing API request, read the OpenAI API documentation: https://platform.openai.com/docs/api-reference/chat/object
+
+### In case of errors
+
+You can run into two kinds of errors
+
+1. R errors due to issues with your R code.
+2. OpenAI API request errors due to issues with your API request.
+
+Any error message that does _not_ start with "OpenAI API request failed" is an **R error**.
+In this case you should carefully read the error message and double check your code.
+For example, a common issue will be due to errors in formatting the input to the message argument.
+
+If the error messages start with "OpenAI API request failed", it is an OpenAI API request error.
+If you get an **OpenAI API request error**, check the **error code** (the three-digit number starting with 4 or 5 in the rror message).
+For example, the error 
+
+```
+  Error: OpenAI API request failed [404]:
+  
+  The model `...` does not exist or you do not have access to it.
+```
+
+In addition to reading the error message, you can check the OpenAI API documentation to figure out what caused your error: https://platform.openai.com/docs/guides/error-codes/api-errors
+
+## For OpenAI *Plus* subscribers
+
+If you have an OpenAI *Plus* subscription, you can use the `gpt-4-turbo` model.
+This model is more powerful than the `gpt-3.5-turbo-0125` model.
+
+```{r}
+MODEL = 'gpt-4-turbo'
+response <- create_chat_completion(
+    model = MODEL,
+    messages = list(
+        list(
+            "role" = "user",
+            "content" = "Who won the world series in 2020?"
+        )
+    )
+)
+response$choices$message.content
+```
