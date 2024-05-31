@@ -56,7 +56,7 @@ Please install `ollama` from here: https://ollama.com/download
 
 ### Using `ollama` in R
 
-Run the code in notebook [test_ollama.qmd](./code/test_ollama.html) to verify that you can access API key is accessible in RStudio and your API access works.
+Run the code in notebook [test_ollama.qmd](./code/test_ollama.qmd) to verify that you can access API key is accessible in RStudio and your API access works.
 
 
 ### Open AI account and API access
@@ -105,7 +105,7 @@ Now,
 
 #### 5. Verify that your API key is accessible in python
 
-Run the code in notebook [test_openai_key.qmd](./code/test_openai_key.html) to verify that your API key is accessible in RStudio and your API access works.
+Run the code in notebook [test_openai_key.qmd](./code/test_openai_key.qmd) to verify that your API key is accessible in RStudio and your API access works.
 
 ## Questions and issues
 

@@ -30,12 +30,12 @@ Go to https://ollama.com/library, choose the LLM model you want to use, and copy
 Let's start with `llama3:8b` because, at the time of writing, it is relatively recent and its large version can be shown to perform similarly well as OpenAI's GPT-4.
 
 ```{r}
-MODEL = 'llama3:latest'
+MODEL = 'llama3:8b'
 # just set this as a global option
 options(rollama_model = MODEL)
 ```
 
-**Note** &mdash; If you want to use a model that is not in the list shown with `rollama`::list_models()`, you need to first pull it.
+**Note** &mdash; If you want to use a model that is not in the list shown with `rollama::list_models()`, you need to first pull it.
 
 ```{r}
 #| eval: false
