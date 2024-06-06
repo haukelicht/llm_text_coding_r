@@ -125,29 +125,29 @@ The stance clasification label categories are
 
 corresponding to the three analysis and separate classification tasks, we provide the following CSV files:
 
-- 1: economic/social policy area classification: "benoit_crowdsourced_2016_policy_area.csv"
+- 1: economic/social policy area classification: "benoit_crowdsourced_2016-policy_area.csv"
 	- column 'label' indicates the policy area: 2 "economic policy", 3 "social policy", 1 "neither"
 	- column 'text' records the coded manifesto sentence
 	- columns 'metadata__pre_sentence' and 'metadata__post_sentence' reocord coded sentences' preceeding and following sentences (if any)
-- 1.1: economic policy stance classification: "benoit_crowdsourced_2016_econ_policy_stance.csv"
+- 1.1: economic policy stance classification: "benoit_crowdsourced_2016-econ_policy_stance.csv"
 	- subset of sentences coded into policy area 2 ("economic policy")
 	- column 'label' indicates the policy issue stance (-2 left <-> 2 right)
 	- column 'text' records the coded manifesto sentence
 	- columns 'metadata__pre_sentence' and 'metadata__post_sentence' reocord coded sentences' preceeding and following sentences (if any)
-- 1.2: social policy stance classification: "benoit_crowdsourced_2016_social_policy_stance.csv"
+- 1.2: social policy stance classification: "benoit_crowdsourced_2016-social_policy_stance.csv"
 	- subset of sentences coded into policy area 3 ("social policy")
 	- column 'label' indicates the policy issue stance (-2 liberal <-> 2 conservative)
 	- column 'text' records the coded manifesto sentence
 	- columns 'metadata__pre_sentence' and 'metadata__post_sentence' reocord coded sentences' preceeding and following sentences (if any)
-- 2: immigration policy area classification: "benoit_crowdsourced_2016_immigration_policy.csv"
+- 2: immigration policy area classification: "benoit_crowdsourced_2016-immigration_policy.csv"
 	- column 'label' indicates the policy area: 4 "immigration policy", 1 "not immigration policy"
 	- column 'text' records the coded manifesto sentence
 	- columns 'metadata__pre_sentence' and 'metadata__post_sentence' reocord coded sentences' preceeding and following sentences (if any)
-- 2.1: immigration policy stance classification: "benoit_crowdsourced_2016_immigration_policy_stance.csv"
+- 2.1: immigration policy stance classification: "benoit_crowdsourced_2016-immigration_policy_stance.csv"
 	- column 'label' indicates the policy issue stance (-1 favorabl/open <-> 1 negative/closed)
 	- column 'text' records the coded manifesto sentence
 	- columns 'metadata__pre_sentence' and 'metadata__post_sentence' reocord coded sentences' preceeding and following sentences (if any)
-- 3: subsidies policy stance classification: "benoit_crowdsourced_2016_subsidies_stance.csv"
+- 3: subsidies policy stance classification: "benoit_crowdsourced_2016-subsidies_stance.csv"
 	- column 'label' indicates the policy issue stance (-1 pro <-> 1 contra)
 	- column 'text' records the coded speech sentences
 	- columns 'metadata__language' indicates a text's language

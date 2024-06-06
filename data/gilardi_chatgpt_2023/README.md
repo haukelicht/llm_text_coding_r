@@ -65,12 +65,12 @@ For news articles, they collect annotations along two coding dimenions:
 
 We have prepared the commun user tweets data, focusing on the relevance, problem/solution frame, and stance classification tasks:
 
-1. relevance classifications: "gilardi_chatgpt_2023_content_moderation_relevance.csv"
+1. relevance classifications: "gilardi_chatgpt_2023-content_moderation_relevance.csv"
 	- column 'label' indicates the classification: 1 "relevant", 0 "irrelevant
 	- column 'text' records the coded tweet's text
-2. problem/solution frame classifications: "gilardi_chatgpt_2023_content_moderation_frame.csv"
+2. problem/solution frame classifications: "gilardi_chatgpt_2023-content_moderation_frame.csv"
 	- column 'label' indicates the frame category: "problem", "solution", "neither", "both"
 	- column 'text' records the coded tweet's text
-3. stance classification: "gilardi_chatgpt_2023_section230_stance.csv"
+3. stance classification: "gilardi_chatgpt_2023-section230_stance.csv"
 	- column 'label' indicates the expressed stance on Section 230: "negative", "neutral", "positive"
 	- column 'text' records the coded tweet's text
