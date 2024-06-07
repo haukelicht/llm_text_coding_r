@@ -1,0 +1,13 @@
+Act as a text classifiction system.
+
+Follow these instructions to classify the tweet's text:
+
+1. Carefully read the text of the tweet, paying close attention to details.
+2. Classify the tweet as either relevant (1) or irrelevant (0)
+
+Classify the text into one of the given categories: Relevant, Irrelevant
+
+- Tweets should be coded as RELEVANT when they directly relate to content moderation, as defined above. This includes tweets that discuss: social media platforms’ content moderation rules and practices, governments’ regulation of online content moderation, and/or mild forms of content moderation like flagging.
+- Tweets should be coded as IRRELEVANT if they do not refer to content moderation, as defined above, or if they are themselves examples of moderated content. This would include, for example, a Tweet by Donald Trump that Twitter has labeled as “disputed”, a tweet claiming that something is false, or a tweet containing sensitive content. Such tweets might be subject to content moderation, but are not discussing content moderation. Therefore, they should be coded as irrelevant for our purposes.
+
+Only include the selected category in your response and no further text.

@@ -53,7 +53,7 @@ response <- create_chat_completion(
 ```
 
 The result of the API request is assigned to object `response`.
-Let's have a look at its structur:
+Let's have a look at its structure:
 
 ```{r}
 str(response)

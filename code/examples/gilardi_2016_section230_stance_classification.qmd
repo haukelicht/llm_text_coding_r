@@ -187,7 +187,7 @@ precision(obs = samples$label, pred = classifications, atom = TRUE)
 recall(obs = samples$label, pred = classifications, atom = TRUE)
 fscore(obs = samples$label, pred = classifications, atom = TRUE)
 ```
-We typically sumamrizes this information with the (unweighted) macro F1 score, which is just the average of class-wise F1 scores
+We typically summarizes this information with the (unweighted) macro F1 score, which is just the average of class-wise F1 scores
 
 ```{r}
 mean(fscore(obs = samples$label, pred = classifications, atom = TRUE)[[1]])
