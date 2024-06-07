@@ -1,0 +1,160 @@
+---
+title: Using OpenAI's chat completions API
+author: Hauke Licht
+date: 2024-06-06
+format: 
+  html:
+    embed-resources: true
+---
+
+OpenAi's chat models are powerful tools for generating human-like text responses, a behavior we can leverage to make them reliable text annotators and coders.
+This notebook explains how to format your data to send it to OpenAi's API.
+
+## The conversation history object
+
+OpenAI's chat models take a so-called **conversation history**  as input and return a model-generated response as output.
+The conversation history is list of messages that records the exchange between the user and the assistant (i.e., the model).
+The conversation history format is designed to make multi-turn conversations easy.
+But it is just as useful for single-turn tasks without any conversation.
+
+
+The message message object records the contributions to a conversation:
+
+```json
+[
+    
+    <first message by user>,
+    <first response by assistant>,
+    <second message by user>,
+    ...,
+    <last response by assistant>
+]
+```
+
+Each message has two attributes: a **_role_** and a **_content_**:
+
+```json
+{
+    "role": "system" | "user" | "assistant", // <== choose one
+    "content": <string> // <== insert text
+}
+```
+
+### Roles
+
+There are three **roles**:
+
+- **"system"**: a 'hidden' prompt to provide the model with relevant task-specific information.
+- **"user"**: the user who is sending inputs and requests to the model
+- **"assistant"**: the model who is responding to the user
+
+**_Note:_** When you use ChatGPT in the browser, you only see the messages send by you (the user) and the model's responses (the assistants message).
+
+Here is a typical conversation history from a *translation* example:
+
+```json
+[
+    {
+        "role": "system",
+        "content": "Act as a translation system that translates English texts to French"
+    },
+    {
+        "role": "user",
+        "content": "Hello, how are you?"
+    },
+    {
+        "role": "assistant",
+        "content": "Bonjour, comment vas-tu?"
+    }
+]
+```
+
+#### The system message
+
+The system message is only defined once at the beginning of a conversation.
+It provides the LLM ("assistant") with behavioral instructions.
+That is, it sets the behavior of the assistant.
+For example, you can modify the personality ("persona") of the assistant or provide specific instructions about how it should behave throughout the conversation.
+
+Note, however that the system message is optional.
+The model's behavior without a system message is likely to be similar to using a generic message such as "You are a helpful assistant."
+
+#### User and assistant messages
+
+After the system message, conversations can be as short as one message or include many back and forth turns between the user and the assistant.
+The user messages provide requests or comments for the assistant to respond to.
+If after the system message you only include one user message, the model will return an assistant message &mdash; the model's response to the user's message (given the instructions in the system message).
+
+But as assistant messages store previous assistant responses, you can also write them to give examples of desired behavior.
+Including conversation history is important when user instructions refer to prior messages.
+Because chat models have no memory of past requests, all relevant information must be supplied as part of the conversation history in each request.
+
+### Combining the system and user message to automate text coding
+
+We can combine the to employ an LLM for text coding.
+The following example illustrates this:
+
+
+```{r}
+instruction <- "
+You will be provided with a tweet, and your task is to classify its sentiment as positive, neutral, or negative.
+
+Categorize the text enclosed in triple quotes into one of the following categories: \"positive\", \"neutral\", \"negative\"
+
+Only return your classification. Omit any further text or explanations.
+"
+
+# define the conversation history
+convo <-  list(
+  # first comes the system message (a.k.a prompt)
+  list(
+    role = "system",
+    content = instruction
+  ),
+  # then comes the user message that only contains the to-be-classified text
+  list(
+    role = "user",
+    content = "'''I loved the new Batman movie!'''"
+  )
+)
+```
+
+## Requesting a chat completion
+
+The way you use the chat completions API for text coding is by specifying a system prompt and a user input and requesting a model-generated assistant response.
+
+To allow communication with the OpenAI API, you first need to verify that your API key is:
+
+```{r}
+library(openai)
+stopifnot(Sys.getenv("OPENAI_API_KEY") != "")
+```
+
+Together with the identifier of the model we want to ask for a response, we send the message object to the API and receive a response from the model: 
+
+```{r}
+MODEL = 'gpt-3.5-turbo-0125'
+response <- create_chat_completion(
+    model = MODEL,
+    messages = convo # defined above
+)
+```
+
+The `response` object returned by calling `create_chat_completion` is a little complex.
+
+```{r}
+str(response)
+```
+
+The relevant content is in the element "choices" as a data frame.
+This data frame will have one row (unless we change the [number of completions](https://platform.openai.com/docs/api-reference/chat/create#chat-create-n) API parameter) and the generated text is in columns "message.content":
+
+```{r}
+response$choices$message.content
+```
+
+As you can see, the assistant's response is the sentiment classification we requested!
+
+Thus, if we send several texts one at a time to the model using the same instructions, we can automate their sentiment classification.
+Of course, this principally also applies to more complex classification and text annotation tasks.
+

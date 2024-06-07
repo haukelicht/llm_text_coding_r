@@ -1,0 +1,193 @@
+---
+title: Classification Evaluation Metrics
+author: Hauke Licht
+date: 2024-05-31
+format: 
+  html:
+    embed-resources: true
+---
+
+This notebook introduces key metrics for evaluating classification performance. 
+Understanding these metrics is crucial for interpreting the performance of classification models, especially in the context of varying data distributions such as imbalanced datasets.
+
+
+## Background: Classification
+
+Classification is the task of predicting a discrete class label for a given input.
+In the context of our workshop, the input is a text.
+
+A text typical classification task is sentiment analysis.
+The goal of sentiment analysis is to distinguish positive from negative texts.
+In this case, the classes are "positive" and "negative".
+Because there are only two classes, this is called **binary classification**.
+
+Sometimes, there are more than two label classes, however.
+For example, in sentiment analysis we can consider the possibility that texts are neither positive nor negative, but neutral.
+In this case, we would have three classes: "positive", "negative", and "neutral".
+This is called **multi-class classification**.
+
+### Train and test sets 
+
+Machine learning models learn to predict the class label based on the features of the input data using a sample of "training" examples.
+Training means to find the model parameters that allow it to make most-accurate predictions.
+Like in an OLS regression, the model learns the relation between the outputs and inputs.
+
+
+### Evaluation
+
+To see how well a model performs to data not available for training, we need to *evaluate* its predictions against some ground truth or gold standard (e.g., and expert's annotations).
+In the context of classification, **evaluation simply means comparing predicted class labels to observed ("true") class labels.**
+To evaluate a model, we thus need a sample of labeled examples that have not been used for training - a separate set of held-out "test" examples.
+
+## Evaluation metrics
+
+### Accuracy
+
+Accuracy is one of the most intuitive and common metrics for assessing the performance of a classification model.
+It is simply the **proportion of examples the model classified correctly**.
+The formula for accuracy is:
+
+$$\text{Accuracy} = \frac{\text{Number of Correct Predictions}}{\text{Total Number of Predictions}}$$
+
+However, the accuracy metric has its **limitations**.
+In the context of imbalanced datasets where the class distribution is skewed (i.e., one class is much more frequent than the other), accuracy can be misleading.
+In such cases, a model might achieve high accuracy by merely predicting the majority class, while failing to correctly predict the minority class, which is often of greater interest.
+
+### Precision, Recall, and the F1 Score
+
+To overcome the limitations of accuracy, especially in imbalanced datasets, we use more nuanced metrics such as precision, recall, and the F1 score.
+
+To understand how what goes into these metrics, consider a binary classification task where we have two classes: "Positive" and "Negative".
+For a set of test examples, we can cross-tabulate the predicted and true class labels into four categories:
+
+
+| <a/> | **_Predicted_ "Positive"** | **_Predicted_ "Negative"** |
+|:--- |:---:|:---:|
+| **Observed "Positive"** | True Positives (TP) | False Negatives (FN) |
+| **Observed "Negative"** | False Positives (FP) | True Negatives (TN) |
+
+
+- **True Positives (TP)**: The model correctly predicted the positive class.
+- **True Negatives (TN)**: The model correctly predicted the negative class.
+- **False Positives (FP)**: The model incorrectly predicted the positive class (it predicted positive, but the true label was negative).
+- **False Negatives (FN)**: The model incorrectly predicted the negative class (it predicted negative, but the true label was positive).
+
+#### Recall
+
+Recall measures the proportion of "positive" examples that were correctly identified by the classifier:
+
+$$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{False Negatives}}$$
+
+Recall should be the focus when the cost of false negatives is high as, for example, in medical diagnosis or when the goal is to retrieve relevant examples (e.g., political texts in a larger corpus of potentially non-political texts).
+
+Note one problem with recall, though. Any classifier can achieve perfect recall by predicting positive class labels for all examples (because in this way, there is no chance to miss any true positives)!
+Hence, we should not only care about recall but also about how many of the examples predicted to be "positive" are indeed "positive" examples - which brings us to the precision metric.
+
+#### Precision
+
+Precision measures the proportion of true positive predictions in the pool of all positive predictions made by the model:
+
+$$\text{Precision} = \frac{\text{True Positives}}{\text{True Positives} + \text{False Positives}}$$
+
+The precision metric is important understand how many of the positive predictions made by the model are actually correct.
+Precision should be the focus when the cost of false positives is high as, for example, in the case of court rulings.
+
+Mirroring the problem with the recall metric, solely focussing on precision can be problematic, however, because a classifier that apploes the principle 'be better safe than sorry' and predicts "positive" labels relatively rarely will have high precision (but low recall).
+
+
+#### F1 Score
+
+The limitations of solely focusing on precision or recall already highlight that its best to keep an eye on both.
+This is the job of the F1 score!
+
+The F1 Score is the [harmonic mean](https://en.wikipedia.org/wiki/Harmonic_mean) of precision and recall and provides as single metrica that evenly balances precision and recall.
+It is computed as follows:
+
+$$F1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
+
+## Computing evaluation metrics with scikit-learn
+
+To illustrate these concepts, we will use simple toy examples and compute these metrics using the `metrica` package.
+
+```{r}
+# load the required libraries
+library(metrica)
+```
+
+```{r}
+# construct observed ("true") and predicted ("pred") labels
+data <- data.frame(
+  y_true = c(0, 1, 1, 0, 1, 0, 0, 1, 1, 0),
+  y_pred = c(0, 0, 1, 0, 1, 1, 0, 1, 0, 0)
+  #             ^           ^        ^     ... the entries highlighted are cases of disagreement
+)
+```
+
+```{r}
+# compute the metrics
+accuracy <- accuracy(data, obs = y_true, pred = y_pred)
+precision <- precision(data, obs = y_true, pred = y_pred)
+recall <- recall(data, obs = y_true, pred = y_pred)
+f1 <- fscore(data, obs = y_true, pred = y_pred)
+
+print(paste("Accuracy:", accuracy))
+print(paste("Precision:", precision))
+print(paste("Recall:", recall))
+print(paste("F1 Score:", f1))
+```
+
+There is a also a super helpful function that presents a nice-to-look-at overview of these metrics:
+
+```{r}
+mets <- c("accuracy", "precision", "recall", "fscore")
+metrics_summary(data, obs = y_true, pred = y_pred, type = "classification", metrics = mets)
+```
+
+The result shows the metrics we have computed above individually, because `metrics_summary` assumes that 1 is the "positive" label class.
+
+## Multi-class classification
+
+When there are more than two label classes, we need to adapt the logic of precision, recall, and the F1 score a little bit:
+To compute these metrics for one label class, we treat it as "positive" class and all other label classes as "negative".
+
+In this way we can compute label class-specific metrics and, as shown above, average them across classes in the macro and weigthed average scores.
+
+```{r}
+# construct observed ("true") and predicted ("pred") labels for three classes
+data <- data.frame(
+  y_true = c(0, 1, 1, 0, 1, 2, 0, 1, 2),
+  y_pred = c(0, 2, 1, 0, 2, 1, 0, 0, 2)
+)
+```
+
+```{r}
+precision <- precision(data, obs = y_true, pred = y_pred, atom = TRUE)
+recall <- recall(data, obs = y_true, pred = y_pred, atom = TRUE)
+f1 <- fscore(data, obs = y_true, pred = y_pred, atom = TRUE)
+
+print(paste("Precisions:", precision))
+print(paste("Recalls:", recall))
+print(paste("F1 Scores:", f1))
+```
+
+You can verify this as follows:
+
+- for label class 0, there are three examples. The predictions are correct for all of them (&rArr; recall = 1.00) although one predicted "0" is actually a "1" (&rArr; precision = 0.75)
+- for label class 1, there are four examples. The predictions are correct for one of them (&rArr; recall = 0.25). And only one out of two times a "1" is predicted this is correct (&rArr; precision = 0.50)
+- for label class 2, there are two examples. The predictions are correct for one of them (&rArr; recall = 0.50). But only one out of three times a "2" is predicted this is correct (&rArr; precision = 0.33)
+- if we just ask what's the share of correctly classified examples (accuracy), the answer is 56%: the first, second, and third "0"; the first "1"; and the last "2" (i.e., 5 out of 9) 
+
+### Micro/macro averages
+
+When we have more than two label classes, there are two types of averages that are often computed:
+
+- The micro average aggregates the contributions of all label classes to compute average metrics by just checking whether the predicted and observed labels match or not.
+- The macro average ("macro avg") computes the metrics for each label class and then averages these estimates across label classes.
+
+So we get the macro averages as follows:
+
+```{r}
+print(paste("Precision (macro):", mean(precision[[1]])))
+print(paste("Recall (macro)", mean(recall[[1]])))
+print(paste("F1 Scores (macro)", mean(f1[[1]])))
+```

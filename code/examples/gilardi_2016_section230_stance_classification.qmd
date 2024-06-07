@@ -1,0 +1,199 @@
+---
+title: Using GPT-4 turbo for Section 230 stance classification
+author: Hauke Licht
+date: 2024-06-07
+format: 
+  html:
+    embed-resources: true
+---
+
+In this notebook, we take data analyzed in Gilardi et al. ([2023](https://doi.org/10.1073/pnas.2305016120)) to illustrate how to use GPT-4-turbo through the OpenAI chat completions API to classify stances in tweets.
+
+**Note** &mdash; You can also use any other GPT model from OpenAI
+
+## Setup
+
+```{r}
+#| warning: false
+library(readr)
+library(dplyr)
+library(purrr)
+library(openai)
+stopifnot(Sys.getenv("OPENAI_API_KEY") != "")
+# note: if you do not have an OpenAI Plus subscription, use gpt-3.5-turbo instead
+MODEL = 'gpt-4-0125-preview'
+library(metrica)
+```
+
+## Load the data
+
+```{r}
+#| message: false
+base_path <- file.path('..', '..')
+data_path <- file.path(base_path, 'data', 'gilardi_chatgpt_2023') 
+
+fp <- file.path(data_path, "gilardi_chatgpt_2023-section230_stance.csv")
+df <- read_csv(fp, col_types = "ccc") # <= read all three columns as character vectors
+nrow(df)
+```
+
+```{r}
+head(df, 2)
+```
+
+```{r}
+table(df$label)
+```
+
+```{r}
+df$text[1]
+df$label[1]
+```
+
+## Classify
+
+### Define the instructions
+
+We take the [original coding instructions](https://www.pnas.org/doi/suppl/10.1073/pnas.2305016120/suppl_file/pnas.2305016120.sapp.pdf) use by Gilardi *et al.* (2023) and slightly adapt them.
+
+```{r}
+instructions <- "
+Your task is to read a tweet about content moderation and classify what stance it takes on Section 230 (if any).
+
+In the context of content moderation, Section 230 is a law in the United States that protects websites and other online platforms from being held legally responsible for the content posted by their users. This means that if someone posts something illegal or harmful on a website, the website itself cannot be sued for allowing it to be posted. However, websites can still choose to moderate content and remove anything that violates their own policies. 
+
+For each tweet in the sample, follow these instructions: 
+
+1. Carefully read the text of the tweet, paying close attention to details.
+2. Classify the tweet as having a positive stance towards Section 230, a negative stance, or a neutral stance.
+
+For each tweet, choose one of the following categories: \"negative\", \"neutral\", \"positive\"
+
+Only respond with your classification. Omit any further text or explanations.
+"
+```
+
+### simple example
+
+```{r}
+# construct the conversation history
+convo <-  list(
+  list(role = "system", content = instructions),
+  list(role = "user", content = df$text[1])
+)
+
+response <- create_chat_completion(
+  model = MODEL,
+  messages = convo,
+  # for reproducibility
+  temperature = 0.0
+)
+
+classification <- response$choices$message.content[1]
+classification
+```
+
+### automate
+
+Typically we do not want to classify only one text but many.
+In this case we need to iterate over them and send each of them to the LLM for classification -- one at a time.
+
+To make the code more concise, let's first define a custom function that wraps the code used in the example above,
+while abstracting away from concrete inputs (the specific tweet text and the specific system message) to general inputs (any tweet text and any system message):
+
+**Note** &mdash; the think above the function definition is just documenting the function parameters using [roxygen2 syntax](https://r-pkgs.org/man.html).
+
+```{r}
+#' Classify the text of a single tweet with an OpenAI model using a custom system prompt
+#'
+#' @param text The to-be-classified tex (passed as user message to the model)
+#' @param model The name of the model (see \url{https://platform.openai.com/docs/models})
+#' @param system.message The system message used to instruct the model
+#'
+#' @return The classification of the text
+classify_tweet <- function(text, model, system.message) {
+  
+  # clean the text 
+  text <- gsub('\\s+', ' ', text)
+  text <- trimws(text)
+  
+  # construct the conversation history
+  convo <-  list(
+    list(role = "system", content = system.message),
+    list(role = "user", content = text)
+  )
+
+  # request a chat completion
+  response <- create_chat_completion(
+    model = model,
+    messages = convo,
+    # for reproducibility
+    temperature = 0.0
+  )
+  
+  classification <- response$choices$message.content[1]
+
+  return(classification)
+}
+```
+
+```{r}
+set.seed(42)
+samples <- df |> 
+  group_by(label) |> 
+  sample_n(25)
+count(samples, label)
+```
+
+#### classify all examples
+
+**Note** &mdash; running the below cell will take a couple of minutes
+```{r}
+# classify: apply custom classification function to all inputs
+classifications <- map_chr(
+  samples$text,
+  classify_tweet,
+  # additional parameters forwarded to `classify_tweet()`
+  model=MODEL,
+  system.message=instructions
+)
+```
+
+```{r}
+table(classifications)
+```
+
+Given that we had 25 examples per label class, we already see that there are some miscalssifications.
+Let's assess this more systematically.
+
+#### Evaluate
+
+Let's first just cross-tabulate the true and predicted labels
+
+```{r}
+table(
+  "obs" = samples$label,
+  "pred" = classifications
+)
+```
+The LLM ha a negative bias (relative to the human-coded "ground truth"). 
+This means that it assigns the negative level too often, resulting in the misclassification of truely "neutral" and "positive" examples.
+Put more formally, its *precision* for the "negative" class is very low and, conversely, its *recall* for "neutral" and "positive" examples will be bad
+
+So let's compute the precision, recall, and F1 metrics:
+
+```{r}
+precision(obs = samples$label, pred = classifications, atom = TRUE)
+recall(obs = samples$label, pred = classifications, atom = TRUE)
+fscore(obs = samples$label, pred = classifications, atom = TRUE)
+```
+We typically sumamrizes this information with the (unweighted) macro F1 score, which is just the average of class-wise F1 scores
+
+```{r}
+mean(fscore(obs = samples$label, pred = classifications, atom = TRUE)[[1]])
+```
+Judged by the macro F1, The overall performance is okayish.
+
+**_Note_** &mdash; Gilardi et al. report an accuracy of ~0.7 (see panel A of their Figure 1).
+
+
