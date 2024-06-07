@@ -1,17 +1,17 @@
 if (!"renv" %in% rownames(installed.packages()))
   install.packages("renv")
 
-if (file.exists("renv.lock")) {
-  renv::restore()
+lock_file <- "renv.lock"
+if (file.exists(lock_file)) {
+  renv::init(bare = TRUE, restart = FALSE)
+  renv::restore(lockfile = lock_file, prompt = FALSE)
 } else {
-  renv::init()
+  renv::init(bare = TRUE, restart = FALSE)
   
   pkgs <- readLines(file.path("setup", "requirements.txt"))
-  lapply(pkgs, renv::install)
+  renv::install(pkgs)
   
   renv::snapshot()
 } 
-  
-  
 
 
