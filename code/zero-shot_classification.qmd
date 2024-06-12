@@ -33,29 +33,21 @@ In this example, we adapt the instruction for one of the tweet classification ta
 - see [this file](https://github.com/haukelicht/llm_text_coding_r/data/gilardi_chatgpt_2023/instructions.md) for a copy of their original task instructions
 
 ```{r}
-instruction <- "
+system_message <- "
+Act as a text classifiction system.
+
 Follow these instructions to classify the tweet's text:
 
 1. Carefully read the text of the tweet, paying close attention to details.
-2. Classify the tweet as either relevant (1) or irrelevant (0)
-"
+2. Classify the tweet as either relevant or irrelevant
 
-categories <- c("Relevant", "Irrelevant")
+Classify the text into one of the given categories: \"Relevant\", \"Irrelevant\"
 
-defintions <- "
 - Tweets should be coded as RELEVANT when they directly relate to content moderation, as defined above. This includes tweets that discuss: social media platforms’ content moderation rules and practices, governments’ regulation of online content moderation, and/or mild forms of content moderation like flagging.
 - Tweets should be coded as IRRELEVANT if they do not refer to content moderation, as defined above, or if they are themselves examples of moderated content. This would include, for example, a Tweet by Donald Trump that Twitter has labeled as “disputed”, a tweet claiming that something is false, or a tweet containing sensitive content. Such tweets might be subject to content moderation, but are not discussing content moderation. Therefore, they should be coded as irrelevant for our purposes.
-"
 
-system_message <- paste0(
-  "Act as a text classifiction system.", "\n",
-  instruction, "\n",
-  "Classify the text into one of the given categories: ", paste(categories, collapse = ", "),
-  "\n",
-  defintions, 
-  "\n",
-  "Only include the selected category in your response and no further text."
-)
+Only include the selected category in your response and no further text.
+"
 cat(system_message)
 ```
 
@@ -202,23 +194,23 @@ In theory, we can also combine several texts in one user message.
 For this, we first need to update the system message to tell the model that it will receive multiple texts in separate lines in the user input:
 
 ```{r}
-instruction <- "
+system_message <- "
+Act as a text classification system.
+
+Each line in the input is a separate tweet.
+
 For each tweet in the input, follow these instructions to classify the tweet's text:
 
 1. Carefully read the text of the tweet, paying close attention to details.
-2. Classify the tweet as either relevant (1) or irrelevant (0)
-"
+2. Classify the tweet as either relevant or irrelevant
 
-system_message <- paste0(
-  "Act as a text classification system.", "\n\n",
-  "Each line in the input is a separate tweet.", "\n", 
-  instruction, "\n",
-  "Classify each tweet into one of the given categories: ", paste(categories, collapse = ", "), "\n ",
-  defintions, 
-  "\n",
-  "Only include the selected category in your response and no further text. ",
-  "Seperate the classifications of individual tweet by newline characters."
-)
+Classify each tweet into one of the given categories: \"Relevant\", \"Irrelevant\"
+ 
+- Tweets should be coded as RELEVANT when they directly relate to content moderation, as defined above. This includes tweets that discuss: social media platforms’ content moderation rules and practices, governments’ regulation of online content moderation, and/or mild forms of content moderation like flagging.
+- Tweets should be coded as IRRELEVANT if they do not refer to content moderation, as defined above, or if they are themselves examples of moderated content. This would include, for example, a Tweet by Donald Trump that Twitter has labeled as “disputed”, a tweet claiming that something is false, or a tweet containing sensitive content. Such tweets might be subject to content moderation, but are not discussing content moderation. Therefore, they should be coded as irrelevant for our purposes.
+
+Only include the selected category in your response and no further text. Seperate the classifications of individual tweet by newline characters.
+"
 cat(system_message)
 ```
 

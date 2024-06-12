@@ -61,7 +61,6 @@ instructions <- "
 Your task is to read a tweet about content moderation and classify what stance it takes on Section 230 (if any).
 
 In the context of content moderation, Section 230 is a law in the United States that protects websites and other online platforms from being held legally responsible for the content posted by their users. This means that if someone posts something illegal or harmful on a website, the website itself cannot be sued for allowing it to be posted. However, websites can still choose to moderate content and remove anything that violates their own policies. 
-
 For each tweet in the sample, follow these instructions: 
 
 1. Carefully read the text of the tweet, paying close attention to details.
@@ -163,7 +162,7 @@ classifications <- map_chr(
 table(classifications)
 ```
 
-Given that we had 25 examples per label class, we already see that there are some miscalssifications.
+Given that we had 25 examples per label class, we already see that there are some misclassifications.
 Let's assess this more systematically.
 
 #### Evaluate
