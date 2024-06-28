@@ -13,6 +13,12 @@ In this notebook, we take data analyzed in Gilardi et al. ([2023](https://doi.or
 
 ## Setup
 
+In the prompts and data folders, I use a common identifier that links the instruction files and the corresponding labeled data:
+
+```{r}
+TASK <- "gilardi_chatgpt_2023-section230_stance"
+```
+
 ```{r}
 #| warning: false
 library(readr)
@@ -32,7 +38,7 @@ library(metrica)
 base_path <- file.path('..', '..')
 data_path <- file.path(base_path, 'data', 'gilardi_chatgpt_2023') 
 
-fp <- file.path(data_path, "gilardi_chatgpt_2023-section230_stance.csv")
+fp <- file.path(data_path, paste0(TASK, ".csv"))
 df <- read_csv(fp, col_types = "ccc") # <= read all three columns as character vectors
 nrow(df)
 ```
@@ -50,27 +56,21 @@ df$text[1]
 df$label[1]
 ```
 
-## Classify
-
-### Define the instructions
+## Define the instructions
 
 We take the [original coding instructions](https://www.pnas.org/doi/suppl/10.1073/pnas.2305016120/suppl_file/pnas.2305016120.sapp.pdf) use by Gilardi *et al.* (2023) and slightly adapt them.
 
 ```{r}
-instructions <- "
-Your task is to read a tweet about content moderation and classify what stance it takes on Section 230 (if any).
-
-In the context of content moderation, Section 230 is a law in the United States that protects websites and other online platforms from being held legally responsible for the content posted by their users. This means that if someone posts something illegal or harmful on a website, the website itself cannot be sued for allowing it to be posted. However, websites can still choose to moderate content and remove anything that violates their own policies. 
-For each tweet in the sample, follow these instructions: 
-
-1. Carefully read the text of the tweet, paying close attention to details.
-2. Classify the tweet as having a positive stance towards Section 230, a negative stance, or a neutral stance.
-
-For each tweet, choose one of the following categories: \"negative\", \"neutral\", \"positive\"
-
-Only respond with your classification. Omit any further text or explanations.
-"
+prompts_path <- file.path(base_path, 'prompts') 
+fp <- file.path(prompts_path, paste0(TASK, ".txt"))
+instructions <- read_lines(fp)
+instructions <- paste(instructions, collapse = "\n")
+cat(instructions)
 ```
+
+## Zero-shot classification
+
+Zero-shot classification means to classif a user input by providing only instructions and no examples.
 
 ### simple example
 
@@ -195,4 +195,233 @@ Judged by the macro F1, The overall performance is okayish.
 
 **_Note_** &mdash; Gilardi et al. report an accuracy of ~0.7 (see panel A of their Figure 1).
 
+## Few-shot classification
 
+Few-shot classification means to classify a user input by providing examples in addition to instructions.
+
+### simple example
+
+Let's say we want to classify a single text:
+
+```{r}
+to_be_classified_text <- df$text[1]
+to_be_classified_text
+```
+
+To demonstrate the desired classification behavior, we need **examples**, that is, pairs of texts and their "true" labels that allow the LLM to learn about the desired response behavior.
+
+Let's start by selecting two examples per label class as examples, sampling from all but the to-be-classified text:
+
+```{r}
+# select two examples per label class, sampling from all but the to-be-classified text
+set.seed(42)
+examples <- df |> 
+  filter(text != to_be_classified_text) |> 
+  select(text, label) |> 
+  group_by(label) |> 
+  sample_n(2) |> 
+  ungroup() |> 
+  # reshuffle order
+  sample_frac(1.0)
+```
+
+We need to convert this data frame into the list-of-lists format required to build the conversation history:
+
+```{r}
+examples <- examples |> 
+  as.list() |> 
+  transpose() |> 
+  map(
+    ~list(
+      list(role = "user", content = .$text),
+      list(role = "assistant", content = .$label)
+    )
+  ) |> 
+  flatten()
+head(examples, 2) 
+```
+
+Now, let's construct the conversation history.
+The important thing to remember is that the examples must come after the instuctions but before the to-be-classified text.
+
+```{r}
+convo <- c(
+  list(list(role = "system", content = instructions)),
+  examples,
+  list(list(role = "user", content = to_be_classified_text))
+)
+
+head(convo, 3)
+tail(convo, 2)
+```
+
+```{r}
+response <- create_chat_completion(
+  model = MODEL,
+  messages = convo,
+  # for reproducibility
+  temperature = 0.0
+)
+
+classification <- response$choices$message.content[1]
+classification
+```
+
+### automate
+
+The same logic applies as in the zero-shot case.
+The only difference is that we need to add a function argument that takes the examples and adds them to the conversation history. 
+
+```{r}
+```
+```{r}
+#' Classify the text of a single tweet with an OpenAI model using a custom system prompt
+#'
+#' @param text The to-be-classified tex (passed as user message to the model)
+#' @param examples list of lists of char message objects that have 'role' and 'content' elements
+#' @param model The name of the model (see \url{https://platform.openai.com/docs/models})
+#' @param system.message The system message used to instruct the model
+#'
+#' @note
+#'    The `examples` are added after the system message and before the `text` is 
+#'    provided as user inout in the last message of the conversation history
+#'    
+#' @return The classification of the text
+fewshot_classify_tweet <- function(text, examples, model, system.message) {
+  
+  # validate the examples format
+  stopifnot(
+    "`examples` must be a list object" = is.list(examples), 
+    "all elements of `examples` must be list ojects" = all(map_lgl(examples, is.list)), 
+    "all elements of `examples` must have elements 'role' and 'content'" = all(map_lgl(map(examples, names), ~identical(., c("role", "content"))))
+  )
+  roles <- map_chr(examples, "role")
+  stopifnot(
+    "elements in `examples` must alternate between user and assistant messages" = all(roles[seq_along(roles) %% 2 == 1] == "user") & all(roles[seq_along(roles) %% 2 == 0] == "assistant")
+  )
+
+  # clean the text 
+  text <- gsub('\\s+', ' ', text)
+  text <- trimws(text)
+  
+  # construct the conversation history
+  convo <-  c(
+    list(list(role = "system", content = system.message)),
+    examples,
+    list(list(role = "user", content = text))
+  )
+
+  # request a chat completion
+  response <- create_chat_completion(
+    model = model,
+    messages = convo,
+    # for reproducibility
+    temperature = 0.0
+  )
+  
+  classification <- response$choices$message.content[1]
+
+  return(classification)
+}
+```
+
+Let's draw the to-be-classified samples:
+
+```{r}
+set.seed(42)
+samples <- df |> 
+  group_by(label) |> 
+  sample_n(25)
+count(samples, label)
+```
+
+Now we can select two examples per label class from the remaining tweets:
+
+```{r}
+set.seed(42)
+examples <- df |> 
+  filter(!status_id %in% samples$status_id) |> 
+  select(text, label) |> 
+  group_by(label) |> 
+  sample_n(2) |> 
+  ungroup() |> 
+  # reshuffle order
+  sample_frac(1.0)
+
+# convert data frame into the list-of-lists format required to build the conversation history
+examples <- examples |> 
+  as.list() |> 
+  transpose() |> 
+  map(
+    ~list(
+      list(role = "user", content = .$text),
+      list(role = "assistant", content = .$label)
+    )
+  ) |> 
+  flatten()
+```
+
+#### classify all examples
+
+**Note** &mdash; Iterating over the samples to classify them will take longer than previously because, in each iteration, the model also needs to process the text and label,s of examples in the conversation history.
+
+```{r}
+# classify: apply custom classification function to all inputs
+fewshot_classifications <- map_chr(
+  samples$text,
+  fewshot_classify_tweet,
+  examples=examples, # <== add examples here (same across to-be-classified texts)
+  # additional parameters forwarded to `fewshot_classify_tweet()`
+  model=MODEL,
+  system.message=instructions
+)
+```
+
+#### Evaluate
+
+Let's first just cross-tabulate the true and predicted labels
+
+```{r}
+table(
+  "obs" = samples$label,
+  "pred" = fewshot_classifications
+)
+```
+The LLM still has a negative bias (relative to the human-coded "ground truth") but its less pronounced than in the zero-shot application. 
+
+Let's compute the precision, recall, and F1 metrics and compare them to the zero-shot results 
+
+```{r}
+list(
+  "zeroshot" = precision(obs = samples$label, pred = classifications, atom = TRUE)[[1]],
+  "fewshot" = precision(obs = samples$label, pred = fewshot_classifications, atom = TRUE)[[1]]
+)
+```
+Because the negativity bias was reduced through fewshot learning, precision in classifying negative samples goes up.
+But this comes at the cost of a reduced positivity bias (precision goes down).
+
+```{r}
+list(
+  "zeroshot" = recall(obs = samples$label, pred = classifications, atom = TRUE)[[1]],
+  "fewshot" = recall(obs = samples$label, pred = fewshot_classifications, atom = TRUE)[[1]]
+)
+```
+But the recall increases in all but th "neutral" class.
+
+Accordingly, we find improved F1 scores in all label classes:
+```{r}
+list(
+  "zeroshot" = fscore(obs = samples$label, pred = classifications, atom = TRUE)[[1]],
+  "fewshot" = fscore(obs = samples$label, pred = fewshot_classifications, atom = TRUE)[[1]]
+)
+```
+This is reflected in an increase in the macro F1 score:
+
+```{r}
+c(
+  "zeroshot" = mean(fscore(obs = samples$label, pred = classifications, atom = TRUE)[[1]]),
+  "fewshot" = mean(fscore(obs = samples$label, pred = fewshot_classifications, atom = TRUE)[[1]])
+)
+```
+
+**Note** &mdash; In this example we have just randomly sampled examples for few-shot prompting. But there are more sophisticated methods for selecting most-informative examples for a to-be-classified text from a set of human-labeled example texts.

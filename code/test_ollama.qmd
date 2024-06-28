@@ -35,7 +35,7 @@ MODEL = 'llama3:8b'
 options(rollama_model = MODEL)
 ```
 
-**Note** &mdash; If you want to use a model that is not in the list shown with `rollama::list_models()`, you need to first pull it.
+**IMPORTANT** &mdash; If you want to use a model that is not in the list shown with `rollama::list_models()`, you need to first pull it.
 
 ```{r}
 #| eval: false

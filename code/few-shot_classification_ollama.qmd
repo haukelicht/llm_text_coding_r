@@ -1,0 +1,293 @@
+---
+title: Few-shot text classification with open-source LLMs and `ollama`
+author: Hauke Licht
+date: 2024-06-28
+format: 
+  html:
+    embed-resources: true
+---
+
+This notebook illustrates how to use open-source generative LLMs for few-shot text classification with `ollama` and the `rollama` R package.
+We will use examples from the replication data of Gilardi et al. ([2023](https://www.pnas.org/doi/10.1073/pnas.2305016120)) because its one of the most often cited political science papers on evaluating ChatGPT for political text classification.
+
+## Few-shot text classification with LLMs
+
+There are **four steps** for performing few-shot text classification:
+
+1. define the instructions for the classification task
+2. select examples that illustrate the desired coding decisions
+3. combine the task instruction, the examples, and the to-be-classified text in a conversation history
+4. send these inputs to the model
+
+### R Setup 
+
+```{r}
+#| warning: false
+# load packages (in order of usage)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(rollama)
+options(rollama_verbose = FALSE)
+options(rollama_show = FALSE)
+options(rollama_model = 'llama3:8b')
+library(metrica)
+```
+
+## 1. Define the task
+
+In this example, we adapt the instruction for one of the tweet classification tasks examined in Gilardi et al. ([2023](https://www.pnas.org/doi/10.1073/pnas.2305016120)) "ChatGPT outperforms crowd workers for text-annotation tasks"
+
+- see [this README file](https://github.com/haukelicht/llm_text_coding_r/data/gilardi_chatgpt_2023/README.md) for a description of the data and tasks covered in the paper
+- see [this file](https://github.com/haukelicht/llm_text_coding_r/data/gilardi_chatgpt_2023/instructions.md) for a copy of their original task instructions
+
+```{r}
+system_message <- "
+Act as a text classifiction system.
+
+Follow these instructions to classify the tweet's text:
+
+1. Carefully read the text of the tweet, paying close attention to details.
+2. Classify the tweet as either relevant or irrelevant
+
+Classify the text into one of the given categories: \"Relevant\", \"Irrelevant\"
+
+- Tweets should be coded as RELEVANT when they directly relate to content moderation, as defined above. This includes tweets that discuss: social media platforms’ content moderation rules and practices, governments’ regulation of online content moderation, and/or mild forms of content moderation like flagging.
+- Tweets should be coded as IRRELEVANT if they do not refer to content moderation, as defined above, or if they are themselves examples of moderated content. This would include, for example, a Tweet by Donald Trump that Twitter has labeled as “disputed”, a tweet claiming that something is false, or a tweet containing sensitive content. Such tweets might be subject to content moderation, but are not discussing content moderation. Therefore, they should be coded as irrelevant for our purposes.
+
+Only include the selected category in your response and no further text.
+"
+cat(system_message)
+```
+# 2. Select examples
+
+Let's load the labeled data:
+
+
+```{r}
+TASK <- "gilardi_chatgpt_2023-content_moderation_relevance"
+base_path <- file.path('..')
+data_path <- file.path(base_path, 'data', 'gilardi_chatgpt_2023') 
+
+fp <- file.path(data_path, paste0(TASK, ".csv"))
+df <- read_csv(fp, col_types = "ccc") # <= read all three columns as character vectors
+
+# we need to convert numeric label codes to text labels
+df$label <- ifelse(df$label == 0, "Irrelevant", "Relevant")
+
+table(df$label)
+```
+
+Now, let's set aside two texts per label class as examples:
+
+```{r}
+set.seed(42)
+examples <- df |> 
+  group_by(label) |> 
+  sample_n(2) |> 
+  ungroup() |> 
+  # reshuffle order
+  sample_frac(1.0)
+```
+
+It's important that we discard the examples from the data we will let the LLM classify because otherwise the classification performance evaluation will be biased.
+
+```{r}
+df <- filter(df, !status_id %in% examples$status_id)
+```
+
+# 3. Construct the conversation history
+
+```{r}
+# let's use an example tweet
+tweet <- df$text[1]
+
+# clean the text 
+# a) replace any white spaces, tabs and line breaks with a single white space
+tweet <- gsub('\\s+', ' ', tweet)
+# b) remove leading and trailing white spaces
+tweet <- trimws(tweet)
+
+cat(tweet)
+```
+
+Now we need to convert the examples into a list of user and assistant messages such that for each examples, the tweet text is in the user message and the ``true'' classification is in the assistant massage:
+
+```{r}
+example_messages <- examples |> 
+  pivot_longer(-1, values_to = "content") |> 
+  transmute(
+    role = ifelse(name == "text", "user", "assistant"),
+    content
+  ) 
+```
+
+**Note** &mdash; in contrast to `openai`, `rollama` expetcs the conversation history in a data frame format (instead of a list of list).
+
+```{r}
+# construct the conversation history
+convo <-  bind_rows(
+  data.frame(role = "system", content = trimws(system_message)),
+  example_messages,
+  data.frame(role = "user", content = tweet)
+) 
+# show first three messages (system message, first example text, first example classification)
+head(as_tibble(convo), 3)
+```
+
+## 4. Prompt the LLM
+
+```{r}
+# request a chat completion
+response <- query(
+  q = convo,
+  # for reproducibility
+  model_params = list(temperature = 0.0, seed = 42L),
+  # switch off verbose mode
+  screen = FALSE
+)
+```
+
+### Parse the result
+
+```{r}
+classification <- response$message$content[1]
+classification
+```
+
+For comparison, the human-coded label:
+
+```{r}
+df$label[1]
+```
+
+**Note** &mdash; If you want to estimate how long it take to process $n$ texts with a fixed instruction, you can process a random sample of texts and get the time elapsed processing each from the response of `query()`:
+
+```{r}
+# note: duration is reported in nanoseconds (see https://github.com/ollama/ollama/blob/main/docs/api.md)
+response$total_duration/1e9 # convert to seconds
+```
+
+## Iterate over several examples
+
+Typically we do not want to classify only one text but many.
+In this case we need to iterate over them and send each of them to the LLM for classification -- one at a time.
+
+To make the code more concise, let's first define a few custom functions that wrap the code used in the example above,
+while abstracting away from concrete inputs (the specific tweet text, the specific system message, the specific examples) to general inputs (any tweet text, any system message, and any examples):
+
+**Note** &mdash; the think above the function definition is just documenting the function parameters using [roxygen2 syntax](https://r-pkgs.org/man.html).
+
+```{r}
+# helper functions
+format_text <- function(x) paste0("'''", trimws(gsub('\\s+', ' ', x)), "'''")
+
+format_examples <- function(x) {
+  stopifnot(
+    "`x` must be a data frame" = is.data.frame(x),
+    "`x` must have at least one row" = nrow(x) > 0,
+    "`x` must have columns 'text' and 'label'" = all(c("text", "label") %in% colnames(x))
+  )
+  x <- x |> 
+    select(text, label) |> 
+    pivot_longer(text:label, values_to = "content") |> 
+    transmute(
+      role = ifelse(name == "text", "user", "assistant"),
+      content = ifelse(name == "text", format_text(content), content)
+    )
+
+  return(x)
+}
+
+#' Classify the text of a single tweet with an OpenAI model using a custom system prompt
+#'
+#' @param text The to-be-classified tex (passed as user message to the model)
+#' @param model The name of the model (see \url{https://platform.openai.com/docs/models})
+#' @param system.message The system message used to instruct the model
+#' @param examples.df data frame with columns 'text' and 'label'
+#'
+#' @return The classification of the text
+classify_tweet <- function(text, model = getOption("rollama_model"), system.message, examples.df) {
+  stopifnot(
+    "`text` must be a single text value" = is.character(text) && length(text) == 1 && !is.na(text),
+    "`model` must be a single text value" = is.character(model) && length(model) == 1 && !is.na(model),
+    "`system.message` must be a single text value" = is.character(system.message) && length(system.message) == 1 && !is.na(system.message),
+    "`examples.df` must be a data frame with at least one row" = is.data.frame(examples.df) && nrow(examples.df) > 0
+  )
+  
+  # construct the conversation history
+  convo <- bind_rows(
+    data.frame(role = "system", content = trimws(system.message)),
+    format_examples(examples.df),
+    data.frame(role = "user", content = format_text(text))
+  ) 
+
+  # request a chat completion
+  response <- query(
+    q = convo,
+    model = model,
+    # for reproducibility
+    model_params = list(temperature = 0.0, seed = 42L),
+    # switch off verbose mode
+    screen = FALSE
+  )
+  
+  # note: the response object has the elements 'done' and 'done_reason' which 
+  #  indicate whether the LLM completed processing successfully 
+  if (response$done && response$done_reason == "stop")
+    classification <- response$message$content[1]
+  else
+    classification <- NA_character_
+
+  return(classification)
+}
+```
+
+No let's see how to apply this function to multiple texts one at a time.
+But first, we need to define the texts we want to classify.
+Here I just select five negative and five positive examples from the replication data:
+
+```{r}
+set.seed(42)
+test_set <- df |> 
+  group_by(label) |> 
+  sample_n(10) |> 
+  ungroup()
+```
+
+Now we can 
+
+1. take the vector of tweet texts (`test_set$text`), 
+2. iterate over it with `purrr::map_chr` (similar to base R's `lapply` or `vapply`), and 
+3. pass each text value to our custom `classify_tweet()` function using our `examples` 
+
+**Note** &mdash; Because the model, the system message, and the examples are constant across texts, we just pass them as additional arguments to `map_chr()` so that they are applied in each iteration.
+
+```{r}
+classifications <- map_chr(
+  test_set$text,  # <== tweet texts to be classified 
+  classify_tweet, # <== custom function performing API call
+  # additional parameters forwarded to `classify_tweet()`
+  system.message=system_message, # <== system message (defined above)
+  examples.df=examples # <== examples (2 per label class) sampled above
+)
+```
+
+Let's inspect the resulting vector of classifications:
+
+```{r}
+table(obs = test_set$label, pred = classifications)
+metrica::fscore(obs = test_set$label, pred = classifications)
+```
+
+This looks already great! 🥳
+
+## Best practices
+
+based on https://arxiv.org/pdf/2102.09690 (section 4)
+
+- sample equal amounts of examples from each label class (due to majority bias)
+- shuffle the order of examples (due to recency bias)
+- choose label class names that have similar frequencies in written language (due to frequency bias)
+- (calibrate)
